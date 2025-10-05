@@ -1,0 +1,41 @@
+markdownExplorer: true
+
+# Project Structure
+projectRoot: C:\Tinedy system
+appDirectory: tinedy-app
+workingDirectoryForCode: C:\Tinedy system\tinedy-app
+workingDirectoryForDocs: C:\Tinedy system
+
+# QA Configuration
+qa:
+  qaLocation: docs/qa
+
+# PRD Configuration
+prd:
+  prdFile: docs/prd.md
+  prdVersion: v4
+  prdSharded: false
+  prdShardedLocation: docs/prd
+  epicFilePattern: epic-{n}*.md
+
+# Architecture Configuration
+architecture:
+  architectureFile: docs/architecture.md
+  architectureVersion: v4
+  architectureSharded: false
+  architectureShardedLocation: docs/architecture
+
+# Custom Technical Documents
+customTechnicalDocuments: null
+
+# DEV Agent Configuration
+devLoadAlwaysFiles:
+  - docs/architecture/coding-standards.md
+  - .ai/project-structure.md
+  - .ai/port-management-checklist.md
+devDebugLog: .ai/debug-log.md
+devStoryLocation: docs/stories
+devWorkingDirectory: tinedy-app
+
+# Agent Configuration
+slashPrefix: BMad

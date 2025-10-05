@@ -1,0 +1,111 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Dev: Start Server",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/tinedy-app"
+      },
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Dev: Clean & Start",
+      "type": "shell",
+      "command": "npm run dev:clean",
+      "options": {
+        "cwd": "${workspaceFolder}/tinedy-app"
+      },
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Dev: Fresh Start (Kill Ports + Clean)",
+      "type": "shell",
+      "command": "npm run dev:fresh",
+      "options": {
+        "cwd": "${workspaceFolder}/tinedy-app"
+      },
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Kill Ports 3000-3003 Only (Safe - Recommended)",
+      "type": "shell",
+      "command": "npm run kill-port",
+      "options": {
+        "cwd": "${workspaceFolder}/tinedy-app"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "⚠️ DANGER: Kill ALL Node.exe (Will close VS Code & all extensions!)",
+      "type": "shell",
+      "command": "echo ⚠️ WARNING: This will kill ALL node processes including VS Code tools! Press Ctrl+C to cancel. && timeout /t 5 && taskkill //F //IM node.exe",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": true
+      }
+    },
+    {
+      "label": "Clean Build Cache",
+      "type": "shell",
+      "command": "npm run clean",
+      "options": {
+        "cwd": "${workspaceFolder}/tinedy-app"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Check Port 3000",
+      "type": "shell",
+      "command": "netstat -ano | findstr :3000",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "TypeScript: Type Check",
+      "type": "shell",
+      "command": "npm run type-check",
+      "options": {
+        "cwd": "${workspaceFolder}/tinedy-app"
+      },
+      "problemMatcher": ["$tsc"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}
