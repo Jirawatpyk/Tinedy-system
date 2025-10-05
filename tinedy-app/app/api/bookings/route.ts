@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase/admin';
 import { bookingFormSchema } from '@/lib/validations/booking';
+import { paginationSchema } from '@/lib/validations/pagination';
 import {
   getServiceDuration,
   getServiceName,
@@ -212,14 +213,29 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const search = searchParams.get('search') || '';
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
     const sortBy = searchParams.get('sortBy') || 'schedule.date';
     const sortOrder = (searchParams.get('sortOrder') || 'asc') as 'asc' | 'desc';
 
-    // PERF-002: Cursor-based pagination parameters
-    const cursor = searchParams.get('cursor') || '';
-    const useCursor = searchParams.get('useCursor') === 'true';
+    // PERF-003: Validate pagination parameters with Zod
+    const paginationResult = paginationSchema.safeParse({
+      page: searchParams.get('page'),
+      limit: searchParams.get('limit'),
+      cursor: searchParams.get('cursor'),
+      useCursor: searchParams.get('useCursor'),
+    });
+
+    if (!paginationResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid pagination parameters',
+          details: paginationResult.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
+
+    const { page, limit, cursor, useCursor } = paginationResult.data;
 
     const queryStart = performance.now();
     // Build query
@@ -300,10 +316,46 @@ export async function GET(request: NextRequest) {
     const snapshot = await query.get();
     const queryDuration = performance.now() - queryStart;
 
-    let bookings = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Array<{
+    // Helper function to serialize Firestore Timestamps
+    const serializeTimestamp = (timestamp: unknown): string | undefined => {
+      try {
+        if (!timestamp) return undefined;
+        // Check if it's a Firestore Timestamp
+        if (typeof (timestamp as Record<string, unknown>)?.toDate === 'function') {
+          return (timestamp as { toDate: () => Date }).toDate().toISOString();
+        }
+        // If it's already a Date object
+        if (timestamp instanceof Date) {
+          return timestamp.toISOString();
+        }
+        // If it's already a string
+        if (typeof timestamp === 'string') {
+          return timestamp;
+        }
+        return undefined;
+      } catch (error) {
+        // Only log errors in development
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('Error serializing timestamp:', error);
+        }
+        return undefined;
+      }
+    };
+
+    // Serialize Firestore Timestamps to ISO strings for frontend
+    let bookings = snapshot.docs.map((doc) => {
+      const data = doc.data();
+
+      // Create properly typed object with serialized timestamps
+      const serialized = {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt ? serializeTimestamp(data.createdAt) : undefined,
+        updatedAt: data.updatedAt ? serializeTimestamp(data.updatedAt) : undefined,
+      };
+
+      return serialized;
+    }) as Array<{
       id: string;
       customer?: {
         name?: string;
@@ -318,6 +370,8 @@ export async function GET(request: NextRequest) {
       assignedTo?: {
         staffName?: string;
       };
+      createdAt?: string | null;
+      updatedAt?: string | null;
       [key: string]: unknown;
     }>;
 

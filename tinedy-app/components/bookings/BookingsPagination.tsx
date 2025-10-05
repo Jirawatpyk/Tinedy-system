@@ -79,6 +79,7 @@ export function BookingsPagination({
       <nav
         aria-label="การนำทางหน้า"
         className="flex flex-col gap-3 px-4 py-4"
+        data-testid="pagination"
       >
         {/* Results count - always visible */}
         <p className="text-sm text-center text-slate-600" aria-live="polite">
@@ -126,7 +127,7 @@ export function BookingsPagination({
           value={pageSize.toString()}
           onValueChange={(value) => onPageSizeChange(Number(value))}
         >
-          <SelectTrigger className="w-full min-h-[44px]">
+          <SelectTrigger className="w-full min-h-[44px]" data-testid="page-size-select">
             <SelectValue placeholder="รายการต่อหน้า" />
           </SelectTrigger>
           <SelectContent>
@@ -146,98 +147,103 @@ export function BookingsPagination({
     <nav
       aria-label="การนำทางหน้า"
       role="navigation"
-      className="flex items-center justify-between px-2 py-4"
+      data-testid="pagination"
+      className="px-2 py-4"
     >
-      {/* Results info with live region for screen readers */}
-      <div className="flex items-center gap-4">
-        <p
-          className="text-sm text-slate-600"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          แสดง {startResult}-{endResult} จาก {totalResults} รายการ
-        </p>
-
-        <div className="flex items-center gap-2">
-          <label htmlFor="page-size-select" className="text-sm text-slate-600">
-            แสดงต่อหน้า:
-          </label>
-          <Select
-            value={pageSize.toString()}
-            onValueChange={(value) => onPageSizeChange(Number(value))}
+      {/* Single row layout with info on left, pagination on right */}
+      <div className="flex items-center justify-between">
+        {/* Left: Results info - compact single line */}
+        <div className="flex items-center gap-4">
+          <p
+            className="text-sm text-slate-600 whitespace-nowrap"
+            aria-live="polite"
+            aria-atomic="true"
           >
-            <SelectTrigger
-              id="page-size-select"
-              className="w-[80px]"
-              aria-label="เลือกจำนวนรายการต่อหน้า"
+            แสดง {startResult}-{endResult} จาก {totalResults} รายการ
+          </p>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="page-size-select" className="text-sm text-slate-600 whitespace-nowrap">
+              แสดงต่อหน้า:
+            </label>
+            <Select
+              value={pageSize.toString()}
+              onValueChange={(value) => onPageSizeChange(Number(value))}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[10, 20, 50, 100].map((size) => (
-                <SelectItem
-                  key={size}
-                  value={size.toString()}
-                  aria-label={`${size} รายการต่อหน้า`}
-                >
-                  {size}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger
+                id="page-size-select"
+                className="w-[80px]"
+                aria-label="เลือกจำนวนรายการต่อหน้า"
+                data-testid="page-size-select"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[10, 20, 50, 100].map((size) => (
+                  <SelectItem
+                    key={size}
+                    value={size.toString()}
+                    aria-label={`${size} รายการต่อหน้า`}
+                  >
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+
+        {/* Right: Pagination controls */}
+        <Pagination className="m-0 w-auto justify-end">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                onClick={() => onPageChange(currentPage - 1)}
+                className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                aria-disabled={currentPage === 1}
+                aria-label="หน้าก่อนหน้า"
+                tabIndex={currentPage === 1 ? -1 : 0}
+              />
+            </PaginationItem>
+
+            {getPageNumbers().map((page, index) =>
+              typeof page === 'number' ? (
+                <PaginationItem key={index}>
+                  <PaginationLink
+                    onClick={() => onPageChange(page)}
+                    isActive={page === currentPage}
+                    className="cursor-pointer"
+                    aria-label={`หน้า ${page}`}
+                    aria-current={page === currentPage ? 'page' : undefined}
+                    tabIndex={0}
+                  >
+                    {page}
+                  </PaginationLink>
+                </PaginationItem>
+              ) : (
+                <PaginationItem key={index}>
+                  <span
+                    className="px-4 py-2 text-slate-400"
+                    aria-hidden="true"
+                  >
+                    ...
+                  </span>
+                </PaginationItem>
+              )
+            )}
+
+            <PaginationItem>
+              <PaginationNext
+                onClick={() => onPageChange(currentPage + 1)}
+                className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                aria-disabled={currentPage === totalPages}
+                aria-label="หน้าถัดไป"
+                tabIndex={currentPage === totalPages ? -1 : 0}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       </div>
-
-      {/* Pagination controls */}
-      <Pagination>
-        <PaginationContent>
-          <PaginationItem>
-            <PaginationPrevious
-              onClick={() => onPageChange(currentPage - 1)}
-              className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-              aria-disabled={currentPage === 1}
-              aria-label="หน้าก่อนหน้า"
-              tabIndex={currentPage === 1 ? -1 : 0}
-            />
-          </PaginationItem>
-
-          {getPageNumbers().map((page, index) =>
-            typeof page === 'number' ? (
-              <PaginationItem key={index}>
-                <PaginationLink
-                  onClick={() => onPageChange(page)}
-                  isActive={page === currentPage}
-                  className="cursor-pointer"
-                  aria-label={`หน้า ${page}`}
-                  aria-current={page === currentPage ? 'page' : undefined}
-                  tabIndex={0}
-                >
-                  {page}
-                </PaginationLink>
-              </PaginationItem>
-            ) : (
-              <PaginationItem key={index}>
-                <span
-                  className="px-4 py-2 text-slate-400"
-                  aria-hidden="true"
-                >
-                  ...
-                </span>
-              </PaginationItem>
-            )
-          )}
-
-          <PaginationItem>
-            <PaginationNext
-              onClick={() => onPageChange(currentPage + 1)}
-              className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-              aria-disabled={currentPage === totalPages}
-              aria-label="หน้าถัดไป"
-              tabIndex={currentPage === totalPages ? -1 : 0}
-            />
-          </PaginationItem>
-        </PaginationContent>
-      </Pagination>
     </nav>
   );
 }

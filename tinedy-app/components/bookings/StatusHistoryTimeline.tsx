@@ -18,9 +18,24 @@ export function StatusHistoryTimeline({
 }: StatusHistoryTimelineProps) {
   const [showAll, setShowAll] = useState(false);
 
+  // Helper function to get timestamp
+  const getTimestamp = (changedAt: unknown): number => {
+    if (!changedAt) return 0;
+    if (typeof (changedAt as Record<string, unknown>)?.toMillis === 'function') {
+      return (changedAt as { toMillis: () => number }).toMillis();
+    }
+    if (typeof changedAt === 'string') {
+      return new Date(changedAt).getTime();
+    }
+    if (changedAt instanceof Date) {
+      return changedAt.getTime();
+    }
+    return 0;
+  };
+
   // Sort by date, newest first
   const sortedHistory = [...history].sort(
-    (a, b) => b.changedAt.toMillis() - a.changedAt.toMillis()
+    (a, b) => getTimestamp(b.changedAt) - getTimestamp(a.changedAt)
   );
 
   if (sortedHistory.length === 0) {

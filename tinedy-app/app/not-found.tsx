@@ -11,7 +11,7 @@ export default function NotFound() {
       <p className="text-slate-600 mb-6 text-center max-w-md">
         ขออภัย หน้าที่คุณกำลังมองหาอาจถูกย้ายหรือไม่มีอยู่ในระบบ
       </p>
-      <Link href="/">
+      <Link href="/dashboard">
         <Button>กลับหน้าหลัก</Button>
       </Link>
     </div>

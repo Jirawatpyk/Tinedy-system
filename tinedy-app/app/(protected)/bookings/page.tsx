@@ -16,17 +16,23 @@ import { FilterChips } from '@/components/bookings/FilterChips';
 import { FilterErrorBoundary } from '@/components/bookings/FilterErrorBoundary';
 import { BookingsTable } from '@/components/bookings/BookingsTable';
 import { BookingsPagination } from '@/components/bookings/BookingsPagination';
+import { ExportButton } from '@/components/bookings/ExportButton';
 import { BookingStatus } from '@/types/booking';
+import type { Booking } from '@/types/booking';
 
-interface Booking {
+// API response type (with serialized Timestamps as strings)
+interface BookingListItem {
   id: string;
   customer: {
     name: string;
     phone: string;
+    email?: string;
+    address?: string;
   };
   service: {
     name: string;
     type: string;
+    category?: string;
   };
   schedule: {
     date: string;
@@ -35,6 +41,7 @@ interface Booking {
   status: BookingStatus;
   createdAt?: string;
   assignedTo?: {
+    staffId?: string;
     staffName?: string;
   };
 }
@@ -55,7 +62,7 @@ export default function BookingsPage() {
   // A11Y-001 FIX: Add ref for pagination focus management
   const paginationRef = useRef<HTMLDivElement>(null);
 
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookings, setBookings] = useState<BookingListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
@@ -244,12 +251,27 @@ export default function BookingsPage() {
           <h1 className="text-3xl font-bold font-display">การจองทั้งหมด</h1>
           <p className="text-slate-600 mt-1">จัดการและติดตามสถานะการจอง</p>
         </div>
-        <Link href="/bookings/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            สร้างการจองใหม่
-          </Button>
-        </Link>
+        <div className="flex gap-3">
+          <ExportButton
+            bookings={bookings as unknown as Booking[]}
+            totalCount={totalResults}
+            dateRange={filters.dateRange.start && filters.dateRange.end ? {
+              start: filters.dateRange.start,
+              end: filters.dateRange.end
+            } : undefined}
+            filters={{
+              status: filters.status,
+              serviceType: filters.serviceType as 'all' | 'cleaning' | 'training',
+              searchQuery: searchQuery || undefined,
+            }}
+          />
+          <Link href="/bookings/new">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              สร้างการจองใหม่
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search Bar and Filters */}

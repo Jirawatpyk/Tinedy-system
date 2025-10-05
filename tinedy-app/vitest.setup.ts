@@ -134,6 +134,7 @@ vi.mock('lucide-react', () => ({
   ArrowUpDown: ({ className }: { className?: string }) => React.createElement('svg', { 'data-testid': 'arrow-up-down-icon', className }),
   ChevronLeft: ({ className }: { className?: string }) => React.createElement('svg', { 'data-testid': 'chevron-left-icon', className }),
   ChevronRight: ({ className }: { className?: string }) => React.createElement('svg', { 'data-testid': 'chevron-right-icon', className }),
+  Download: ({ className }: { className?: string }) => React.createElement('svg', { 'data-testid': 'download-icon', className }),
 }));
 
 // Mock use-debounce

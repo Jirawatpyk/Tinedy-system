@@ -5,6 +5,44 @@
 :root {
   --background: #f5f3ee;
   --foreground: #2d241d;
+
+  /* Primary colors */
+  --primary: #2e4057;
+  --primary-foreground: #ffffff;
+
+  /* Accent colors */
+  --accent: #e2e8f0;
+  --accent-foreground: #1e293b;
+
+  /* Destructive colors */
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  /* Border & Ring */
+  --border: #e2e8f0;
+  --ring: #2e4057;
+
+  /* Input */
+  --input: #e2e8f0;
+
+  /* Muted */
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+
+  /* Secondary */
+  --secondary: #f1f5f9;
+  --secondary-foreground: #1e293b;
+
+  /* Card */
+  --card: #ffffff;
+  --card-foreground: #2d241d;
+
+  /* Popover */
+  --popover: #ffffff;
+  --popover-foreground: #2d241d;
+
+  /* Spacing (for Radix UI components) */
+  --spacing: 0.25rem;
 }
 
 body {

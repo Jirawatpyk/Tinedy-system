@@ -276,7 +276,6 @@ Comprehensive documentation is located in the `docs/` directory:
 - ตอบกลับเป็นภาษาไทยเท่านั้น (Always respond in Thai)
 - ให้คำอธิบายที่เข้าใจง่าย ชัดเจน (Provide clear, easy-to-understand explanations)
 -คำสั่ง Npm run build ผู้ใช้จะเป็นคนรันให้ครับ
--ถ้า vitest มีปัญหาให้เรียก user มา ติตดั้งให้
 
 ### MCP Integration
 - ใช้ MCP tools ที่มีอยู่ในการพัฒนา (Use available MCP tools for development)

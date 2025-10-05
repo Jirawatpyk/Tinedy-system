@@ -5,7 +5,6 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -42,14 +41,14 @@ export function StatusChangeConfirmDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>เปลี่ยนสถานะการจอง?</AlertDialogTitle>
-          <AlertDialogDescription className="space-y-4">
+          <div className="space-y-4">
             <div className="flex items-center gap-2">
               <StatusBadge status={booking.status} />
               <ArrowRight className="h-4 w-4 text-slate-400" />
               <StatusBadge status={newStatus} />
             </div>
 
-            <p className="text-slate-700">{STATUS_CHANGE_MESSAGES[newStatus]}</p>
+            <p className="text-sm text-slate-600">{STATUS_CHANGE_MESSAGES[newStatus]}</p>
 
             {booking.assignedTo && newStatus === 'in_progress' && (
               <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
@@ -74,7 +73,7 @@ export function StatusChangeConfirmDialog({
                 </p>
               </div>
             )}
-          </AlertDialogDescription>
+          </div>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>ยกเลิก</AlertDialogCancel>

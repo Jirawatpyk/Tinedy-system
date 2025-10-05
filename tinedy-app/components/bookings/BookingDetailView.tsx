@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useBooking } from '@/lib/hooks/useBooking';
 import { useUpdateBookingStatus } from '@/lib/hooks/useUpdateBookingStatus';
@@ -76,7 +75,12 @@ export function BookingDetailView({ bookingId, isOpen, onClose }: BookingDetailV
       });
       router.push(`/bookings/new?${params.toString()}`);
     } catch (error) {
-      console.error('Error duplicating booking:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error duplicating booking:', error);
+      }
+      toast.error('ไม่สามารถทำซ้ำการจองได้', {
+        description: 'กรุณาลองใหม่อีกครั้ง',
+      });
       setIsDuplicating(false);
     }
   };
@@ -117,24 +121,25 @@ export function BookingDetailView({ bookingId, isOpen, onClose }: BookingDetailV
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>การจอง #{booking.id}</SheetTitle>
-        </SheetHeader>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0">
+        {/* Header with padding */}
+        <div className="sticky top-0 bg-white z-10 border-b px-6 py-4">
+          <SheetHeader>
+            <SheetTitle className="text-xl">การจอง #{booking.id}</SheetTitle>
+          </SheetHeader>
+        </div>
 
-        {/* Status Section - Prominent placement */}
-        <section className="mt-4">
-          <h3 className="font-semibold text-base mb-3">สถานะการจอง</h3>
-          <StatusSelector
-            booking={booking}
-            onStatusChange={handleStatusChange}
-            disabled={isUpdatingStatus}
-          />
-        </section>
-
-        <Separator className="mt-6" />
-
-        <div className="space-y-6 mt-6">
+        {/* Scrollable content with padding */}
+        <div className="px-6 py-4 space-y-4">
+          {/* Status Section - Prominent placement */}
+          <section className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+            <h3 className="font-semibold text-sm text-slate-700 mb-3">สถานะการจอง</h3>
+            <StatusSelector
+              booking={booking}
+              onStatusChange={handleStatusChange}
+              disabled={isUpdatingStatus}
+            />
+          </section>
           {/* Duplication Indicator - Duplicated From */}
           {booking.duplicatedFrom && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -193,46 +198,46 @@ export function BookingDetailView({ bookingId, isOpen, onClose }: BookingDetailV
           )}
 
           {/* Customer Information Section */}
-          <section>
-            <h3 className="font-semibold text-base mb-3 flex items-center gap-2">
-              <User className="h-4 w-4" />
+          <section aria-labelledby="customer-info-heading" className="bg-white rounded-lg p-4 border border-slate-200">
+            <h3 id="customer-info-heading" className="font-semibold text-sm text-slate-700 mb-4 flex items-center gap-2">
+              <User className="h-4 w-4" aria-hidden="true" />
               ข้อมูลลูกค้า
             </h3>
-            <div className="space-y-3 pl-6">
-              <div className="flex items-start gap-2">
-                <User className="h-4 w-4 text-slate-400 mt-0.5" />
-                <div>
-                  <p className="text-sm text-slate-600">ชื่อลูกค้า</p>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <User className="h-4 w-4 text-slate-400 mt-0.5" aria-hidden="true" />
+                <div className="flex-1">
+                  <p className="text-xs text-slate-600">ชื่อลูกค้า</p>
                   <p className="text-sm text-slate-900 font-medium">{booking.customer.name}</p>
                 </div>
               </div>
-              <div className="flex items-start gap-2">
-                <Phone className="h-4 w-4 text-slate-400 mt-0.5" />
-                <div>
-                  <p className="text-sm text-slate-600">เบอร์โทรศัพท์</p>
+              <div className="flex items-start gap-3">
+                <Phone className="h-4 w-4 text-slate-400 mt-0.5" aria-hidden="true" />
+                <div className="flex-1">
+                  <p className="text-xs text-slate-600">เบอร์โทรศัพท์</p>
                   <p className="text-sm text-slate-900 font-medium">{booking.customer.phone}</p>
                 </div>
               </div>
               {booking.customer.email && (
-                <div className="flex items-start gap-2">
-                  <Mail className="h-4 w-4 text-slate-400 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-slate-600">อีเมล</p>
+                <div className="flex items-start gap-3">
+                  <Mail className="h-4 w-4 text-slate-400 mt-0.5" aria-hidden="true" />
+                  <div className="flex-1">
+                    <p className="text-xs text-slate-600">อีเมล</p>
                     <p className="text-sm text-slate-900 font-medium">{booking.customer.email}</p>
                   </div>
                 </div>
               )}
-              <div className="flex items-start gap-2">
-                <MapPin className="h-4 w-4 text-slate-400 mt-0.5" />
-                <div>
-                  <p className="text-sm text-slate-600">ที่อยู่</p>
+              <div className="flex items-start gap-3">
+                <MapPin className="h-4 w-4 text-slate-400 mt-0.5" aria-hidden="true" />
+                <div className="flex-1">
+                  <p className="text-xs text-slate-600">ที่อยู่</p>
                   <p className="text-sm text-slate-900 font-medium">{booking.customer.address}</p>
                 </div>
               </div>
               {booking.customer.id && (
                 <Link
                   href={`/customers/${booking.customer.id}`}
-                  className="text-sm text-blue-600 hover:text-blue-800 underline inline-block"
+                  className="text-sm text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-1 mt-2"
                 >
                   ดูข้อมูลลูกค้า →
                 </Link>
@@ -240,20 +245,18 @@ export function BookingDetailView({ bookingId, isOpen, onClose }: BookingDetailV
             </div>
           </section>
 
-          <Separator />
-
           {/* Service Details Section */}
-          <section>
-            <h3 className="font-semibold text-base mb-3 flex items-center gap-2">
-              <FileText className="h-4 w-4" />
+          <section aria-labelledby="service-info-heading" className="bg-white rounded-lg p-4 border border-slate-200">
+            <h3 id="service-info-heading" className="font-semibold text-sm text-slate-700 mb-4 flex items-center gap-2">
+              <FileText className="h-4 w-4" aria-hidden="true" />
               ข้อมูลบริการ
             </h3>
-            <div className="space-y-3 pl-6">
+            <div className="space-y-3">
               <div>
-                <p className="text-sm text-slate-600 mb-1">ชื่อบริการ</p>
+                <p className="text-xs text-slate-600 mb-1">ชื่อบริการ</p>
                 <p className="text-sm text-slate-900 font-medium">{booking.service.name}</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">{booking.service.type === 'cleaning' ? 'ทำความสะอาด' : 'อบรม'}</Badge>
                 <Badge variant="outline">
                   {booking.service.category === 'deep' && 'แบบลึก'}
@@ -263,17 +266,17 @@ export function BookingDetailView({ bookingId, isOpen, onClose }: BookingDetailV
                 </Badge>
               </div>
               <div>
-                <p className="text-sm text-slate-600 mb-1">ระยะเวลาโดยประมาณ</p>
+                <p className="text-xs text-slate-600 mb-1">ระยะเวลาโดยประมาณ</p>
                 <p className="text-sm text-slate-900 font-medium">
                   {booking.service.estimatedDuration} นาที ({Math.floor(booking.service.estimatedDuration / 60)} ชั่วโมง)
                 </p>
               </div>
               {booking.service.requiredSkills && booking.service.requiredSkills.length > 0 && (
                 <div>
-                  <p className="text-sm text-slate-600 mb-1">ทักษะที่ต้องการ</p>
+                  <p className="text-xs text-slate-600 mb-1">ทักษะที่ต้องการ</p>
                   <div className="flex flex-wrap gap-1">
-                    {booking.service.requiredSkills.map((skill, index) => (
-                      <Badge key={index} variant="secondary" className="text-xs">
+                    {booking.service.requiredSkills.map((skill) => (
+                      <Badge key={skill} variant="secondary" className="text-xs">
                         {skill}
                       </Badge>
                     ))}
@@ -283,28 +286,26 @@ export function BookingDetailView({ bookingId, isOpen, onClose }: BookingDetailV
             </div>
           </section>
 
-          <Separator />
-
           {/* Schedule Section */}
-          <section>
-            <h3 className="font-semibold text-base mb-3 flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
+          <section aria-labelledby="schedule-heading" className="bg-white rounded-lg p-4 border border-slate-200">
+            <h3 id="schedule-heading" className="font-semibold text-sm text-slate-700 mb-4 flex items-center gap-2">
+              <Calendar className="h-4 w-4" aria-hidden="true" />
               กำหนดการ
             </h3>
-            <div className="space-y-3 pl-6">
-              <div className="flex items-start gap-2">
-                <Calendar className="h-4 w-4 text-slate-400 mt-0.5" />
-                <div>
-                  <p className="text-sm text-slate-600">วันที่</p>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <Calendar className="h-4 w-4 text-slate-400 mt-0.5" aria-hidden="true" />
+                <div className="flex-1">
+                  <p className="text-xs text-slate-600">วันที่</p>
                   <p className="text-sm text-slate-900 font-medium">
                     {formatThaiDate(booking.schedule.date)}
                   </p>
                 </div>
               </div>
-              <div className="flex items-start gap-2">
-                <Clock className="h-4 w-4 text-slate-400 mt-0.5" />
-                <div>
-                  <p className="text-sm text-slate-600">เวลา</p>
+              <div className="flex items-start gap-3">
+                <Clock className="h-4 w-4 text-slate-400 mt-0.5" aria-hidden="true" />
+                <div className="flex-1">
+                  <p className="text-xs text-slate-600">เวลา</p>
                   <p className="text-sm text-slate-900 font-medium">
                     {formatTime(booking.schedule.startTime)} - {formatTime(booking.schedule.endTime)}
                   </p>
@@ -313,84 +314,73 @@ export function BookingDetailView({ bookingId, isOpen, onClose }: BookingDetailV
             </div>
           </section>
 
-          <Separator />
-
           {/* Staff Assignment Section */}
-          <section>
-            <h3 className="font-semibold text-base mb-3">การมอบหมายพนักงาน</h3>
-            <div className="pl-6">
-              {booking.assignedTo ? (
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-slate-600 mb-1">พนักงาน</p>
-                    <p className="text-sm text-slate-900 font-medium">{booking.assignedTo.staffName}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-600 mb-1">มอบหมายเมื่อ</p>
-                    <p className="text-sm text-slate-900 font-medium">
-                      {booking.assignedTo.assignedAt && formatThaiDateTime(booking.assignedTo.assignedAt)}
-                    </p>
-                  </div>
-                  <Link
-                    href={`/staff/${booking.assignedTo.staffId}`}
-                    className="text-sm text-blue-600 hover:text-blue-800 underline inline-block"
-                  >
-                    ดูข้อมูลพนักงาน →
-                  </Link>
+          <section aria-labelledby="staff-assignment-heading" className="bg-white rounded-lg p-4 border border-slate-200">
+            <h3 id="staff-assignment-heading" className="font-semibold text-sm text-slate-700 mb-4">การมอบหมายพนักงาน</h3>
+            {booking.assignedTo ? (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-slate-600 mb-1">พนักงาน</p>
+                  <p className="text-sm text-slate-900 font-medium">{booking.assignedTo.staffName}</p>
                 </div>
-              ) : (
-                <p className="text-sm text-slate-500 italic">ยังไม่ได้มอบหมายพนักงาน</p>
-              )}
-            </div>
+                <div>
+                  <p className="text-xs text-slate-600 mb-1">มอบหมายเมื่อ</p>
+                  <p className="text-sm text-slate-900 font-medium">
+                    {booking.assignedTo.assignedAt && formatThaiDateTime(booking.assignedTo.assignedAt)}
+                  </p>
+                </div>
+                <Link
+                  href={`/staff/${booking.assignedTo.staffId}`}
+                  className="text-sm text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-1 mt-2"
+                >
+                  ดูข้อมูลพนักงาน →
+                </Link>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 italic">ยังไม่ได้มอบหมายพนักงาน</p>
+            )}
           </section>
 
-          <Separator />
-
           {/* Status History Section */}
-          <section>
+          <section className="bg-white rounded-lg p-4 border border-slate-200">
             <StatusHistoryTimeline history={booking.statusHistory || []} />
           </section>
 
-          <Separator />
-
           {/* Additional Notes */}
           {booking.notes && (
-            <>
-              <section>
-                <h3 className="font-semibold text-base mb-3">หมายเหตุ</h3>
-                <div className="pl-6">
-                  <p className="text-sm text-slate-700">{booking.notes}</p>
-                </div>
-              </section>
-              <Separator />
-            </>
+            <section className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+              <h3 className="font-semibold text-sm text-slate-700 mb-3">หมายเหตุ</h3>
+              <p className="text-sm text-slate-700">{booking.notes}</p>
+            </section>
           )}
 
           {/* Metadata Section */}
-          <section>
-            <h3 className="font-semibold text-base mb-3">ข้อมูลเพิ่มเติม</h3>
-            <div className="space-y-2 pl-6">
+          <section className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+            <h3 className="font-semibold text-sm text-slate-700 mb-3">ข้อมูลเพิ่มเติม</h3>
+            <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">รหัสการจอง</span>
-                <span className="font-mono font-medium">{booking.id}</span>
+                <span className="font-mono font-medium text-slate-900">{booking.id}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">สร้างเมื่อ</span>
-                <span className="font-medium">
+                <span className="font-medium text-slate-900">
                   {booking.createdAt && formatThaiDateTime(booking.createdAt)}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">อัปเดตล่าสุด</span>
-                <span className="font-medium">
+                <span className="font-medium text-slate-900">
                   {booking.updatedAt && formatThaiDateTime(booking.updatedAt)}
                 </span>
               </div>
             </div>
           </section>
+        </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-2 pt-4 sticky bottom-0 bg-white pb-4 border-t">
+        {/* Action Buttons - Fixed at bottom */}
+        <div className="sticky bottom-0 bg-white border-t px-6 py-4">
+          <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -429,18 +419,18 @@ export function BookingDetailView({ bookingId, isOpen, onClose }: BookingDetailV
             </Button>
           </div>
         </div>
-
-        {/* Cancel Booking Dialog */}
-        <CancelBookingDialog
-          booking={booking}
-          isOpen={showCancelDialog}
-          onClose={() => setShowCancelDialog(false)}
-          onSuccess={() => {
-            // Dialog will be automatically closed by CancelBookingDialog
-            // Booking data will be refetched automatically by React Query
-          }}
-        />
       </SheetContent>
+
+      {/* Cancel Booking Dialog */}
+      <CancelBookingDialog
+        booking={booking}
+        isOpen={showCancelDialog}
+        onClose={() => setShowCancelDialog(false)}
+        onSuccess={() => {
+          // Dialog will be automatically closed by CancelBookingDialog
+          // Booking data will be refetched automatically by React Query
+        }}
+      />
     </Sheet>
   );
 }

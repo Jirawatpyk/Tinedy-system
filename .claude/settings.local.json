@@ -60,7 +60,8 @@
       "Bash(npx eslint:*)",
       "Bash(if not exist \"components\\bookings\" mkdir componentsbookings)",
       "Bash(ls:*)",
-      "Bash(if exist .next rmdir /s /q .next)"
+      "Bash(if exist .next rmdir /s /q .next)",
+      "Bash(if not exist \"c:\\Tinedy system\\docs\\qa\\gates\" mkdir \"c:\\Tinedy system\\docs\\qa\\gates\")"
     ],
     "deny": [],
     "ask": []

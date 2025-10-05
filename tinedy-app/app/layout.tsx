@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Raleway, Poppins, JetBrains_Mono } from "next/font/google";
+import { Raleway, Poppins, JetBrains_Mono, Sarabun } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/AuthContext";
 import { QueryProvider } from "@/lib/providers/QueryProvider";
@@ -8,6 +8,13 @@ import { Toaster } from "@/components/ui/sonner";
 const raleway = Raleway({
   subsets: ["latin"],
   variable: "--font-raleway",
+  display: "swap",
+});
+
+const sarabun = Sarabun({
+  weight: ["300", "400", "500", "600", "700"],
+  subsets: ["thai", "latin"],
+  variable: "--font-sarabun",
   display: "swap",
 });
 
@@ -35,7 +42,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="th" className={`${raleway.variable} ${poppins.variable} ${jetbrainsMono.variable}`}>
+    <html lang="th" className={`${raleway.variable} ${sarabun.variable} ${poppins.variable} ${jetbrainsMono.variable}`}>
       <body className="font-body antialiased">
         <QueryProvider>
           <AuthProvider>

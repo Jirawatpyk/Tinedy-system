@@ -24,15 +24,23 @@ export default async function ProtectedLayout({
 
   // No session cookie = not authenticated
   if (!sessionCookie) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Protected Layout] No session cookie found');
+    }
     redirect('/login');
   }
 
   // Verify session cookie with Firebase Admin SDK
   try {
-    await adminAuth.verifySessionCookie(sessionCookie, true);
+    const decodedClaims = await adminAuth.verifySessionCookie(sessionCookie, true);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Protected Layout] Session verified for user:', decodedClaims.uid);
+    }
   } catch (error) {
     // Invalid or expired session = redirect to login
-    console.error('Session verification failed:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[Protected Layout] Session verification failed:', error);
+    }
     redirect('/login');
   }
 

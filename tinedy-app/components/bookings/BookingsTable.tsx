@@ -15,6 +15,29 @@ import { HighlightText } from '@/components/ui/highlight-text';
 import { BookingStatus } from '@/types/booking';
 import { cn } from '@/lib/utils';
 
+/**
+ * Formats a date string to Thai locale format
+ * @param dateString - ISO date string or null/undefined
+ * @returns Formatted date string or '-' if invalid
+ */
+function formatCreatedDate(dateString: string | null | undefined): string {
+  if (!dateString) return '-';
+
+  try {
+    const date = new Date(dateString);
+    // Check if date is valid
+    if (isNaN(date.getTime())) return '-';
+
+    return date.toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return '-';
+  }
+}
+
 interface Booking {
   id: string;
   customer: {
@@ -52,7 +75,7 @@ export function BookingsTable({
   searchQuery = '',
 }: BookingsTableProps) {
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="border rounded-lg overflow-hidden" data-testid="bookings-table">
       <Table>
         <TableHeader>
           <TableRow>
@@ -149,13 +172,7 @@ export function BookingsTable({
               </TableCell>
               <TableCell>
                 <div className="text-sm text-slate-500">
-                  {booking.createdAt
-                    ? new Date(booking.createdAt).toLocaleDateString('th-TH', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                      })
-                    : '-'}
+                  {formatCreatedDate(booking.createdAt)}
                 </div>
               </TableCell>
               <TableCell>

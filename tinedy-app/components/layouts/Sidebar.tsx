@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import type { NavItem } from '@/types/navigation';
 
 const menuItems: NavItem[] = [
-  { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'การจอง', href: '/bookings', icon: Calendar },
   { label: 'ลูกค้า', href: '/customers', icon: Users },
   { label: 'พนักงาน', href: '/staff', icon: UserCog },
@@ -34,7 +34,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
       {/* Logo Area */}
       <div className="flex items-center justify-center h-20 px-6 border-b border-slate-700">
         <Link
-          href="/"
+          href="/dashboard"
           aria-label="กลับไปหน้าแรก"
           className="text-2xl font-display font-bold text-white hover:scale-105 transition-transform duration-200"
         >
