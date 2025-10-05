@@ -61,7 +61,8 @@
       "Bash(if not exist \"components\\bookings\" mkdir componentsbookings)",
       "Bash(ls:*)",
       "Bash(if exist .next rmdir /s /q .next)",
-      "Bash(if not exist \"c:\\Tinedy system\\docs\\qa\\gates\" mkdir \"c:\\Tinedy system\\docs\\qa\\gates\")"
+      "Bash(if not exist \"c:\\Tinedy system\\docs\\qa\\gates\" mkdir \"c:\\Tinedy system\\docs\\qa\\gates\")",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
