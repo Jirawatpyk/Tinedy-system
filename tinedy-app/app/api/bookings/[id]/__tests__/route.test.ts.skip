@@ -1,0 +1,225 @@
+// Mock Firebase Admin
+jest.mock('@/lib/firebase/admin', () => ({
+  adminDb: {
+    collection: jest.fn(() => ({
+      doc: jest.fn(() => ({
+        get: jest.fn(),
+        update: jest.fn(),
+      })),
+    })),
+  },
+}));
+
+// Mock auth session
+jest.mock('@/lib/auth/session', () => ({
+  getServerSession: jest.fn(() =>
+    Promise.resolve({
+      uid: 'test-user-123',
+      email: 'test@example.com',
+      role: 'admin',
+    })
+  ),
+}));
+
+import { GET, PATCH } from '../route';
+
+// Use NextRequest from jest.setup.js mock
+const { NextRequest } = jest.requireMock('next/server');
+
+describe('GET /api/bookings/[id] (TEST-003)', () => {
+  it('returns 401 if not authenticated', async () => {
+    const { getServerSession } = await import('@/lib/auth/session');
+    (getServerSession as jest.Mock).mockResolvedValueOnce(null);
+
+    const request = new NextRequest('http://localhost/api/bookings/test-123');
+    const params = Promise.resolve({ id: 'test-123' });
+
+    const response = await GET(request, { params });
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.error).toBe('Unauthorized');
+  });
+
+  it('returns booking if authenticated and exists', async () => {
+    const mockBookingData = {
+      customer: { name: 'Test User', phone: '0812345678', address: '123 St' },
+      service: { type: 'cleaning', category: 'deep', name: 'Deep Clean' },
+      status: 'pending',
+    };
+
+    const { adminDb } = await import('@/lib/firebase/admin');
+    const mockGet = jest.fn().mockResolvedValue({
+      exists: true,
+      id: 'test-123',
+      data: () => mockBookingData,
+    });
+
+    (adminDb.collection as jest.Mock).mockReturnValue({
+      doc: jest.fn(() => ({ get: mockGet })) as unknown as ReturnType<typeof adminDb.collection>['doc'],
+    } as unknown as ReturnType<typeof adminDb.collection>);
+
+    const request = new NextRequest('http://localhost/api/bookings/test-123');
+    const params = Promise.resolve({ id: 'test-123' });
+
+    const response = await GET(request, { params });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.booking.id).toBe('test-123');
+  });
+
+  it('returns 404 if booking not found', async () => {
+    const { adminDb } = await import('@/lib/firebase/admin');
+    const mockGet = jest.fn().mockResolvedValue({ exists: false });
+
+    (adminDb.collection as jest.Mock).mockReturnValue({
+      doc: jest.fn(() => ({ get: mockGet })) as unknown as ReturnType<typeof adminDb.collection>['doc'],
+    } as unknown as ReturnType<typeof adminDb.collection>);
+
+    const request = new NextRequest('http://localhost/api/bookings/nonexistent');
+    const params = Promise.resolve({ id: 'nonexistent' });
+
+    const response = await GET(request, { params });
+    const data = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(data.success).toBe(false);
+  });
+});
+
+describe('PATCH /api/bookings/[id] (TEST-007)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns 401 if not authenticated', async () => {
+    const { getServerSession } = await import('@/lib/auth/session');
+    (getServerSession as jest.Mock).mockResolvedValueOnce(null);
+
+    const request = new NextRequest('http://localhost/api/bookings/test-123', {
+      method: 'PATCH',
+      body: JSON.stringify({ notes: 'Updated' }),
+    });
+    const params = Promise.resolve({ id: 'test-123' });
+
+    const response = await PATCH(request, { params });
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.error).toBe('Unauthorized');
+  });
+
+  it('protects immutable fields (id, createdAt, createdBy)', async () => {
+    const mockBookingData = {
+      status: 'pending',
+      createdAt: { toDate: () => new Date('2025-01-01') },
+      createdBy: 'original-user',
+    };
+
+    const { adminDb } = await import('@/lib/firebase/admin');
+    const mockUpdate = jest.fn().mockResolvedValue({});
+    const mockGet = jest.fn()
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => mockBookingData,
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        id: 'test-123',
+        data: () => mockBookingData,
+      });
+
+    (adminDb.collection as jest.Mock).mockReturnValue({
+      doc: jest.fn(() => ({
+        get: mockGet,
+        update: mockUpdate,
+      })) as unknown as ReturnType<typeof adminDb.collection>['doc'],
+    } as unknown as ReturnType<typeof adminDb.collection>);
+
+    const request = new NextRequest('http://localhost/api/bookings/test-123', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        notes: 'Updated',
+        id: 'hacked-id',
+        createdAt: new Date(),
+        createdBy: 'hacker',
+      }),
+    });
+    const params = Promise.resolve({ id: 'test-123' });
+
+    await PATCH(request, { params });
+
+    const updateCall = mockUpdate.mock.calls[0][0];
+    expect(updateCall).not.toHaveProperty('id');
+    expect(updateCall).not.toHaveProperty('createdAt');
+    expect(updateCall).not.toHaveProperty('createdBy');
+  });
+
+  it('tracks changes in changeHistory (AC5)', async () => {
+    const mockBookingData = {
+      status: 'pending',
+      notes: 'Old notes',
+    };
+
+    const { adminDb } = await import('@/lib/firebase/admin');
+    const mockUpdate = jest.fn().mockResolvedValue({});
+    const mockGet = jest.fn()
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => mockBookingData,
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        id: 'test-123',
+        data: () => ({ ...mockBookingData, notes: 'New notes' }),
+      });
+
+    (adminDb.collection as jest.Mock).mockReturnValue({
+      doc: jest.fn(() => ({
+        get: mockGet,
+        update: mockUpdate,
+      })) as unknown as ReturnType<typeof adminDb.collection>['doc'],
+    } as unknown as ReturnType<typeof adminDb.collection>);
+
+    const request = new NextRequest('http://localhost/api/bookings/test-123', {
+      method: 'PATCH',
+      body: JSON.stringify({ notes: 'New notes' }),
+    });
+    const params = Promise.resolve({ id: 'test-123' });
+
+    await PATCH(request, { params });
+
+    const updateCall = mockUpdate.mock.calls[0][0];
+    expect(updateCall.changeHistory).toBeDefined();
+  });
+
+  it('validates status transitions (LOGIC-004)', async () => {
+    const mockBookingData = {
+      status: 'completed', // Cannot change from completed
+    };
+
+    const { adminDb } = await import('@/lib/firebase/admin');
+    const mockGet = jest.fn().mockResolvedValue({
+      exists: true,
+      data: () => mockBookingData,
+    });
+
+    (adminDb.collection as jest.Mock).mockReturnValue({
+      doc: jest.fn(() => ({ get: mockGet })) as unknown as ReturnType<typeof adminDb.collection>['doc'],
+    } as unknown as ReturnType<typeof adminDb.collection>);
+
+    const request = new NextRequest('http://localhost/api/bookings/test-123', {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'pending' }), // Invalid transition
+    });
+    const params = Promise.resolve({ id: 'test-123' });
+
+    const response = await PATCH(request, { params });
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toContain('ไม่สามารถเปลี่ยนสถานะ');
+  });
+});

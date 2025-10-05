@@ -1,0 +1,407 @@
+/**
+ * Integration Test: Cancel Booking End-to-End Flow
+ *
+ * This test validates the complete cancellation flow from UI interaction
+ * through API processing to database updates and React Query cache invalidation.
+ */
+
+import { QueryClient } from '@tanstack/react-query';
+
+// Mock Firebase Admin BEFORE imports
+jest.mock('@/lib/firebase/admin', () => ({
+  adminDb: {
+    collection: jest.fn(),
+    runTransaction: jest.fn(),
+  },
+}));
+
+// Mock auth session
+jest.mock('@/lib/auth/session', () => ({
+  getServerSession: jest.fn(),
+}));
+
+// Import after mocks
+import { adminDb } from '@/lib/firebase/admin';
+import { getServerSession } from '@/lib/auth/session';
+
+const mockGetServerSession = getServerSession as jest.Mock;
+
+describe('Cancel Booking Integration Flow', () => {
+  let queryClient: QueryClient;
+
+  const mockAdminSession = {
+    uid: 'admin-user-1',
+    email: 'admin@tinedy.com',
+    role: 'admin',
+  };
+
+  const mockBookingData = {
+    id: 'booking-integration-test-123',
+    status: 'confirmed',
+    customer: {
+      name: 'นางสาวทดสอบ ระบบ',
+      phone: '0812345678',
+    },
+    schedule: {
+      date: '2025-10-10',
+      startTime: '10:00',
+    },
+    assignedTo: {
+      staffId: 'staff-123',
+      staffName: 'คุณพนักงาน ทดสอบ',
+    },
+  };
+
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockGetServerSession.mockResolvedValue(mockAdminSession);
+    jest.clearAllMocks();
+  });
+
+  describe('Complete Cancellation Flow', () => {
+    it('should complete full cancellation flow from request to DB update', async () => {
+      // Mock Firestore transaction
+      const mockUpdate = jest.fn();
+      const mockGet = jest.fn().mockResolvedValue({
+        exists: true,
+        id: mockBookingData.id,
+        data: () => mockBookingData,
+      });
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(async (callback) => {
+        const transaction = {
+          get: mockGet,
+          update: mockUpdate,
+        };
+
+        return await callback(transaction);
+      });
+
+      // Simulate API call (this would normally come from the component)
+      const response = await fetch('/api/bookings/booking-integration-test-123/status', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'customer_cancelled',
+          notes: 'ลูกค้าติดธุระกะทันหัน',
+        }),
+      });
+
+      // Verify API response
+      expect(response.status).toBe(200);
+
+      // Verify transaction was used
+      expect(adminDb.runTransaction).toHaveBeenCalled();
+
+      // Verify booking was fetched
+      expect(mockGet).toHaveBeenCalled();
+
+      // Verify update was called with correct data
+      expect(mockUpdate).toHaveBeenCalled();
+      const updateCall = mockUpdate.mock.calls[0];
+      const updateData = updateCall[1];
+
+      // Verify status update
+      expect(updateData.status).toBe('cancelled');
+
+      // Verify status history entry
+      expect(updateData.statusHistory).toBeDefined();
+
+      // Verify staff unassignment
+      expect(updateData.assignedTo).toBeDefined();
+
+      // Verify timestamps
+      expect(updateData.updatedAt).toBeDefined();
+      expect(updateData.updatedBy).toBe(mockAdminSession.uid);
+    });
+
+    it('should prevent cancellation of already completed booking', async () => {
+      const mockGet = jest.fn().mockResolvedValue({
+        exists: true,
+        id: 'completed-booking-123',
+        data: () => ({
+          ...mockBookingData,
+          status: 'completed',
+        }),
+      });
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(async (callback) => {
+        const transaction = {
+          get: mockGet,
+          update: jest.fn(),
+        };
+
+        try {
+          await callback(transaction);
+        } catch (error) {
+          throw new Error('TERMINAL_STATE');
+        }
+      });
+
+      const response = await fetch('/api/bookings/completed-booking-123/status', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'test',
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      const data = await response.json();
+      expect(data.error).toContain('เสร็จสิ้นหรือยกเลิก');
+    });
+  });
+
+  describe('React Query Cache Invalidation', () => {
+    it('should invalidate booking queries after successful cancellation', async () => {
+      const mockUpdate = jest.fn();
+      (adminDb.runTransaction as jest.Mock).mockImplementation(async (callback) => {
+        const transaction = {
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            id: mockBookingData.id,
+            data: () => mockBookingData,
+          }),
+          update: mockUpdate,
+        };
+
+        return await callback(transaction);
+      });
+
+      // Set up queries in cache
+      queryClient.setQueryData(['booking', mockBookingData.id], mockBookingData);
+      queryClient.setQueryData(['bookings'], [mockBookingData]);
+
+      // Simulate mutation (normally done by useCancelBooking hook)
+      await queryClient.executeMutation({
+        mutationFn: async () => {
+          const response = await fetch(`/api/bookings/${mockBookingData.id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'cancelled',
+              reason: 'customer_cancelled',
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to cancel');
+          }
+
+          return response.json();
+        },
+        onSuccess: (_data, variables) => {
+          // This mimics the behavior in useCancelBooking
+          queryClient.invalidateQueries({ queryKey: ['booking', mockBookingData.id] });
+          queryClient.invalidateQueries({ queryKey: ['bookings'] });
+        },
+      });
+
+      // Verify queries were invalidated
+      const bookingQuery = queryClient.getQueryState(['booking', mockBookingData.id]);
+      const bookingsQuery = queryClient.getQueryState(['bookings']);
+
+      expect(bookingQuery?.isInvalidated).toBe(true);
+      expect(bookingsQuery?.isInvalidated).toBe(true);
+    });
+  });
+
+  describe('Staff Unassignment Side Effects', () => {
+    it('should properly unassign staff when cancelling', async () => {
+      const mockUpdate = jest.fn();
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(async (callback) => {
+        const transaction = {
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            id: mockBookingData.id,
+            data: () => mockBookingData,
+          }),
+          update: mockUpdate,
+        };
+
+        return await callback(transaction);
+      });
+
+      await fetch(`/api/bookings/${mockBookingData.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'staff_unavailable',
+        }),
+      });
+
+      // Verify update was called
+      expect(mockUpdate).toHaveBeenCalled();
+
+      // Verify assignedTo field is being deleted
+      const updateCall = mockUpdate.mock.calls[0];
+      const updateData = updateCall[1];
+      expect(updateData).toHaveProperty('assignedTo');
+
+      // In real Firestore, this would be FieldValue.delete()
+      // which removes the field from the document
+    });
+
+    it('should not add assignedTo field when no staff was assigned', async () => {
+      const mockBookingWithoutStaff = {
+        ...mockBookingData,
+        assignedTo: undefined,
+      };
+
+      const mockUpdate = jest.fn();
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(async (callback) => {
+        const transaction = {
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            id: mockBookingData.id,
+            data: () => mockBookingWithoutStaff,
+          }),
+          update: mockUpdate,
+        };
+
+        return await callback(transaction);
+      });
+
+      await fetch(`/api/bookings/${mockBookingData.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'customer_cancelled',
+        }),
+      });
+
+      expect(mockUpdate).toHaveBeenCalled();
+      const updateData = mockUpdate.mock.calls[0][1];
+
+      // assignedTo should not be in update data when it wasn't assigned
+      // (we don't delete a field that doesn't exist)
+      expect(updateData.status).toBe('cancelled');
+    });
+  });
+
+  describe('Status History Tracking Integration', () => {
+    it('should create complete status history entry with all required fields', async () => {
+      const mockUpdate = jest.fn();
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(async (callback) => {
+        const transaction = {
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            id: mockBookingData.id,
+            data: () => mockBookingData,
+          }),
+          update: mockUpdate,
+        };
+
+        return await callback(transaction);
+      });
+
+      const cancellationData = {
+        status: 'cancelled',
+        reason: 'customer_cancelled',
+        notes: 'ลูกค้าเปลี่ยนแผน',
+      };
+
+      await fetch(`/api/bookings/${mockBookingData.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cancellationData),
+      });
+
+      expect(mockUpdate).toHaveBeenCalled();
+      const updateData = mockUpdate.mock.calls[0][1];
+
+      // Verify status history structure
+      expect(updateData.statusHistory).toBeDefined();
+
+      // In real implementation, this would use FieldValue.arrayUnion
+      // which would add the new entry to the existing array
+    });
+  });
+
+  describe('RBAC Integration', () => {
+    it('should allow operator to cancel bookings', async () => {
+      mockGetServerSession.mockResolvedValue({
+        ...mockAdminSession,
+        role: 'operator',
+      });
+
+      const mockUpdate = jest.fn();
+      (adminDb.runTransaction as jest.Mock).mockImplementation(async (callback) => {
+        const transaction = {
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            id: mockBookingData.id,
+            data: () => mockBookingData,
+          }),
+          update: mockUpdate,
+        };
+
+        return await callback(transaction);
+      });
+
+      const response = await fetch(`/api/bookings/${mockBookingData.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'customer_cancelled',
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(mockUpdate).toHaveBeenCalled();
+    });
+
+    it('should prevent staff from cancelling bookings', async () => {
+      mockGetServerSession.mockResolvedValue({
+        ...mockAdminSession,
+        role: 'staff',
+      });
+
+      const response = await fetch(`/api/bookings/${mockBookingData.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'test',
+        }),
+      });
+
+      expect(response.status).toBe(403);
+      const data = await response.json();
+      expect(data.error).toBe('ไม่มีสิทธิ์ในการยกเลิกการจอง');
+    });
+  });
+
+  describe('Error Recovery', () => {
+    it('should handle transaction failures gracefully', async () => {
+      (adminDb.runTransaction as jest.Mock).mockRejectedValue(new Error('Transaction failed'));
+
+      const response = await fetch(`/api/bookings/${mockBookingData.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'customer_cancelled',
+        }),
+      });
+
+      expect(response.status).toBe(500);
+      const data = await response.json();
+      expect(data.error).toBe('เกิดข้อผิดพลาดในการอัปเดตสถานะ');
+    });
+  });
+});

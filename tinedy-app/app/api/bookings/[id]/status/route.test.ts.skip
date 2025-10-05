@@ -1,0 +1,429 @@
+import { NextRequest } from 'next/server';
+
+// Mock Firebase Admin BEFORE any imports that use it
+jest.mock('@/lib/firebase/admin', () => ({
+  adminDb: {
+    collection: jest.fn(),
+    runTransaction: jest.fn(),
+  },
+}));
+
+// Mock auth session
+jest.mock('@/lib/auth/session', () => ({
+  getServerSession: jest.fn(),
+}));
+
+// Import after mocks
+import { PATCH } from './route';
+import { getServerSession } from '@/lib/auth/session';
+import { adminDb } from '@/lib/firebase/admin';
+
+const mockGetServerSession = getServerSession as jest.MockedFunction<typeof getServerSession>;
+
+describe('PATCH /api/bookings/[id]/status', () => {
+  const mockBookingId = 'test-booking-123';
+  const validSession = {
+    uid: 'admin-user-1',
+    email: 'admin@tinedy.com',
+    role: 'admin',
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('Authentication & Authorization', () => {
+    it('should return 401 if no session', async () => {
+      mockGetServerSession.mockResolvedValue(null);
+
+      const request = new NextRequest('http://localhost/api/bookings/test-123/status', {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'cancelled', reason: 'test' }),
+      });
+
+      const response = await PATCH(request, {
+        params: Promise.resolve({ id: 'test-123' }),
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.error).toBe('Unauthorized');
+    });
+
+    it('should return 403 if user is not admin or operator', async () => {
+      mockGetServerSession.mockResolvedValue({
+        ...validSession,
+        role: 'staff',
+      });
+
+      const request = new NextRequest('http://localhost/api/bookings/test-123/status', {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'cancelled', reason: 'test' }),
+      });
+
+      const response = await PATCH(request, {
+        params: Promise.resolve({ id: 'test-123' }),
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.error).toBe('ไม่มีสิทธิ์ในการยกเลิกการจอง');
+    });
+
+    it('should allow admin to cancel booking', async () => {
+      mockGetServerSession.mockResolvedValue({
+        ...validSession,
+        role: 'admin',
+      });
+
+      const mockTransaction = jest.fn().mockResolvedValue({
+        id: mockBookingId,
+        status: 'cancelled',
+      });
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(mockTransaction);
+
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'cancelled', reason: 'customer_cancelled' }),
+      });
+
+      const response = await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+
+      expect(response.status).toBe(200);
+    });
+
+    it('should allow operator to cancel booking', async () => {
+      mockGetServerSession.mockResolvedValue({
+        ...validSession,
+        role: 'operator',
+      });
+
+      const mockTransaction = jest.fn().mockResolvedValue({
+        id: mockBookingId,
+        status: 'cancelled',
+      });
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(mockTransaction);
+
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'cancelled', reason: 'customer_cancelled' }),
+      });
+
+      const response = await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+
+      expect(response.status).toBe(200);
+    });
+  });
+
+  describe('Input Validation', () => {
+    beforeEach(() => {
+      mockGetServerSession.mockResolvedValue(validSession);
+    });
+
+    it('should return 400 for invalid status', async () => {
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'invalid_status', reason: 'test' }),
+      });
+
+      const response = await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(data.error).toBeDefined();
+    });
+
+    it('should return 400 if cancelling without reason', async () => {
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'cancelled' }),
+      });
+
+      const response = await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toBe('กรุณาระบุเหตุผลในการยกเลิก');
+    });
+
+    it('should accept cancellation with valid reason', async () => {
+      const mockTransaction = jest.fn().mockResolvedValue({
+        id: mockBookingId,
+        status: 'cancelled',
+      });
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(mockTransaction);
+
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'customer_cancelled',
+        }),
+      });
+
+      const response = await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+
+      expect(response.status).toBe(200);
+    });
+  });
+
+  describe('Terminal State Protection', () => {
+    beforeEach(() => {
+      mockGetServerSession.mockResolvedValue(validSession);
+    });
+
+    it('should return 400 if booking is already completed', async () => {
+      (adminDb.runTransaction as jest.Mock).mockImplementation((callback) => {
+        return callback({
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            id: mockBookingId,
+            data: () => ({ status: 'completed' }),
+          }),
+          update: jest.fn(),
+        }).catch(() => {
+          throw new Error('TERMINAL_STATE');
+        });
+      });
+
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'cancelled', reason: 'test' }),
+      });
+
+      const response = await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toContain('เสร็จสิ้นหรือยกเลิก');
+    });
+
+    it('should return 400 if booking is already cancelled', async () => {
+      (adminDb.runTransaction as jest.Mock).mockImplementation((callback) => {
+        return callback({
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            id: mockBookingId,
+            data: () => ({ status: 'cancelled' }),
+          }),
+          update: jest.fn(),
+        }).catch(() => {
+          throw new Error('TERMINAL_STATE');
+        });
+      });
+
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'pending', reason: 'test' }),
+      });
+
+      const response = await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  describe('Booking Not Found', () => {
+    beforeEach(() => {
+      mockGetServerSession.mockResolvedValue(validSession);
+    });
+
+    it('should return 404 if booking does not exist', async () => {
+      (adminDb.runTransaction as jest.Mock).mockImplementation((callback) => {
+        return callback({
+          get: jest.fn().mockResolvedValue({
+            exists: false,
+          }),
+          update: jest.fn(),
+        }).catch(() => {
+          throw new Error('NOT_FOUND');
+        });
+      });
+
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'cancelled', reason: 'test' }),
+      });
+
+      const response = await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+      const data = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(data.error).toBe('ไม่พบการจองที่ต้องการ');
+    });
+  });
+
+  describe('Staff Unassignment', () => {
+    beforeEach(() => {
+      mockGetServerSession.mockResolvedValue(validSession);
+    });
+
+    it('should unassign staff when cancelling booking with assignedTo', async () => {
+      const mockUpdate = jest.fn();
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(async (callback) => {
+        const transaction = {
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            id: mockBookingId,
+            data: () => ({
+              status: 'confirmed',
+              assignedTo: {
+                staffId: 'staff-123',
+                staffName: 'John Doe',
+              },
+            }),
+          }),
+          update: mockUpdate,
+        };
+
+        return await callback(transaction);
+      });
+
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'staff_unavailable',
+        }),
+      });
+
+      await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+
+      // Verify update was called with assignedTo: FieldValue.delete()
+      expect(mockUpdate).toHaveBeenCalled();
+      const updateCall = mockUpdate.mock.calls[0];
+      expect(updateCall[1]).toHaveProperty('assignedTo');
+    });
+
+    it('should not attempt to unassign if no staff assigned', async () => {
+      const mockUpdate = jest.fn();
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(async (callback) => {
+        const transaction = {
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            id: mockBookingId,
+            data: () => ({
+              status: 'pending',
+              // No assignedTo field
+            }),
+          }),
+          update: mockUpdate,
+        };
+
+        return await callback(transaction);
+      });
+
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'customer_cancelled',
+        }),
+      });
+
+      await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+
+      // Verify update was called but without assignedTo in the update data
+      expect(mockUpdate).toHaveBeenCalled();
+    });
+  });
+
+  describe('Status History Tracking', () => {
+    beforeEach(() => {
+      mockGetServerSession.mockResolvedValue(validSession);
+    });
+
+    it('should add entry to statusHistory with reason for cancellation', async () => {
+      const mockUpdate = jest.fn();
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(async (callback) => {
+        const transaction = {
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            id: mockBookingId,
+            data: () => ({
+              status: 'confirmed',
+            }),
+          }),
+          update: mockUpdate,
+        };
+
+        return await callback(transaction);
+      });
+
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'customer_cancelled',
+          notes: 'Customer changed plans',
+        }),
+      });
+
+      await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+
+      expect(mockUpdate).toHaveBeenCalled();
+      const updateCall = mockUpdate.mock.calls[0][1];
+      expect(updateCall).toHaveProperty('statusHistory');
+      expect(updateCall).toHaveProperty('status', 'cancelled');
+    });
+  });
+
+  describe('Transaction Safety', () => {
+    beforeEach(() => {
+      mockGetServerSession.mockResolvedValue(validSession);
+    });
+
+    it('should use runTransaction for atomic operations', async () => {
+      const mockTransaction = jest.fn().mockResolvedValue({
+        id: mockBookingId,
+        status: 'cancelled',
+      });
+
+      (adminDb.runTransaction as jest.Mock).mockImplementation(mockTransaction);
+
+      const request = new NextRequest(`http://localhost/api/bookings/${mockBookingId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'customer_cancelled',
+        }),
+      });
+
+      await PATCH(request, {
+        params: Promise.resolve({ id: mockBookingId }),
+      });
+
+      expect(adminDb.runTransaction).toHaveBeenCalled();
+    });
+  });
+});

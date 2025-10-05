@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+             request.auth.token.role == 'admin';
+    }
+
+    function isOperator() {
+      return isAuthenticated() &&
+             request.auth.token.role in ['admin', 'operator'];
+    }
+
+    function isStaff() {
+      return isAuthenticated() &&
+             request.auth.token.role == 'staff';
+    }
+
+    // Bookings collection rules
+    match /bookings/{bookingId} {
+      // All authenticated users can read bookings
+      allow read: if isAuthenticated();
+
+      // Create: Admin and operators only
+      allow create: if isOperator() &&
+        // Validate required fields
+        request.resource.data.customer.name is string &&
+        request.resource.data.customer.name.size() > 0 &&
+        request.resource.data.customer.phone.matches('^0[0-9]{9}$') &&
+        request.resource.data.service.type in ['cleaning', 'training'] &&
+        request.resource.data.service.category in ['deep', 'regular', 'individual', 'corporate'] &&
+        // Status must be 'pending' on creation
+        request.resource.data.status == 'pending' &&
+        // Timestamps must be set correctly
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      // Update: Admin and operators can update
+      allow update: if isOperator() &&
+        // Prevent modification of immutable fields
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        // Ensure updatedAt and updatedBy are set
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.updatedBy == request.auth.uid;
+
+      // Delete: Only admin can delete
+      allow delete: if isAdmin();
+    }
+
+    // Customers collection
+    match /customers/{customerId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOperator() &&
+        request.resource.data.phone.matches('^0[0-9]{9}$');
+      allow delete: if isAdmin();
+    }
+
+    // Staff collection (for future stories)
+    match /staff/{staffId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Users collection (auth-related)
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
+      allow delete: if isAdmin();
+    }
+  }
+}

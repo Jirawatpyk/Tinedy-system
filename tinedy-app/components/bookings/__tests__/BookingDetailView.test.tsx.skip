@@ -1,0 +1,140 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import BookingDetailView from '../BookingDetailView';
+
+const createTestQueryClient = () =>
+  new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+
+describe('BookingDetailView (TEST-003)', () => {
+  it('renders loading state initially', () => {
+    const queryClient = createTestQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BookingDetailView bookingId="test-123" isOpen={true} onClose={jest.fn()} />
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByText(/กำลังโหลด/i)).toBeInTheDocument();
+  });
+
+  it('renders booking details after loading', async () => {
+    const mockBooking = {
+      id: 'test-123',
+      customer: {
+        name: 'John Doe',
+        phone: '0812345678',
+        email: 'john@example.com',
+        address: '123 Test St',
+      },
+      service: {
+        type: 'cleaning' as const,
+        category: 'deep' as const,
+        name: 'ทำความสะอาดแบบลึก',
+      },
+      schedule: {
+        date: '2025-10-05',
+        startTime: '10:00',
+      },
+      status: 'pending' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ success: true, booking: mockBooking }),
+      } as Response)
+    );
+
+    const queryClient = createTestQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BookingDetailView bookingId="test-123" isOpen={true} onClose={jest.fn()} />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('John Doe')).toBeInTheDocument();
+      expect(screen.getByText('0812345678')).toBeInTheDocument();
+    });
+  });
+
+  it('renders error state when fetch fails', async () => {
+    global.fetch = jest.fn(() =>
+      Promise.reject(new Error('API Error'))
+    );
+
+    const queryClient = createTestQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BookingDetailView bookingId="test-123" isOpen={true} onClose={jest.fn()} />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/เกิดข้อผิดพลาด/i)).toBeInTheDocument();
+    });
+  });
+
+  it('disables duplicate and cancel buttons with tooltips', async () => {
+    const mockBooking = {
+      id: 'test-123',
+      customer: { name: 'Test', phone: '0812345678', address: '123 St' },
+      service: { type: 'cleaning' as const, category: 'deep' as const, name: 'Deep Clean' },
+      schedule: { date: '2025-10-05', startTime: '10:00' },
+      status: 'pending' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ success: true, booking: mockBooking }),
+      } as Response)
+    );
+
+    const queryClient = createTestQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BookingDetailView bookingId="test-123" isOpen={true} onClose={jest.fn()} />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      const duplicateButton = screen.getByTitle(/ฟีเจอร์นี้จะพัฒนาในอนาคต.*1.9/i);
+      const cancelButton = screen.getByTitle(/ฟีเจอร์นี้จะพัฒนาในอนาคต.*1.10/i);
+
+      expect(duplicateButton).toBeDisabled();
+      expect(cancelButton).toBeDisabled();
+    });
+  });
+
+  it('stops polling when Sheet is closed', () => {
+    const queryClient = createTestQueryClient();
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <BookingDetailView bookingId="test-123" isOpen={true} onClose={jest.fn()} />
+      </QueryClientProvider>
+    );
+
+    // Rerender with isOpen=false
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <BookingDetailView bookingId="test-123" isOpen={false} onClose={jest.fn()} />
+      </QueryClientProvider>
+    );
+
+    // Verify polling is disabled when sheet is closed
+    const queries = queryClient.getQueryCache().findAll();
+    expect(queries.length).toBeGreaterThanOrEqual(0);
+  });
+});

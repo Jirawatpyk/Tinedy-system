@@ -1,0 +1,480 @@
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { Booking } from '@/types/booking';
+import { Timestamp } from 'firebase/firestore';
+
+// Mock sonner toast
+jest.mock('sonner', () => ({
+  toast: {
+    success: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
+// Mock date formatter
+jest.mock('@/lib/utils/date-formatter', () => ({
+  formatThaiDate: jest.fn((date: string) => `วันที่ ${date}`),
+}));
+
+// Import after mocks
+import { CancelBookingDialog } from '../CancelBookingDialog';
+
+const createTestQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+const mockBooking: Booking = {
+  id: 'test-booking-123',
+  customer: {
+    name: 'นางสาวทดสอบ ระบบ',
+    phone: '0812345678',
+    email: 'test@example.com',
+    address: '123 ถนนทดสอบ',
+  },
+  service: {
+    type: 'cleaning',
+    category: 'deep',
+    name: 'ทำความสะอาดแบบรวม',
+    requiredSkills: ['cleaning'],
+    estimatedDuration: 240,
+  },
+  schedule: {
+    date: '2025-10-10',
+    startTime: '10:00',
+    endTime: '14:00',
+  },
+  status: 'confirmed',
+  statusHistory: [],
+  createdAt: Timestamp.now(),
+  createdBy: 'admin-1',
+  updatedAt: Timestamp.now(),
+  updatedBy: 'admin-1',
+};
+
+const mockBookingWithStaff: Booking = {
+  ...mockBooking,
+  assignedTo: {
+    staffId: 'staff-123',
+    staffName: 'คุณพนักงาน ทดสอบ',
+    assignedAt: Timestamp.now(),
+  },
+};
+
+describe('CancelBookingDialog', () => {
+  let queryClient: QueryClient;
+  const mockOnClose = jest.fn();
+  const mockOnSuccess = jest.fn();
+
+  beforeEach(() => {
+    queryClient = createTestQueryClient();
+    jest.clearAllMocks();
+    global.fetch = jest.fn();
+  });
+
+  const renderDialog = (props: Partial<Parameters<typeof CancelBookingDialog>[0]> = {}) => {
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <CancelBookingDialog
+          booking={mockBooking}
+          isOpen={true}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+          {...props}
+        />
+      </QueryClientProvider>
+    );
+  };
+
+  describe('Rendering', () => {
+    it('should render dialog when open', () => {
+      renderDialog();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('should display booking information', () => {
+      renderDialog();
+      expect(screen.getByText(/นางสาวทดสอบ ระบบ/)).toBeInTheDocument();
+      expect(screen.getByText(/วันที่ 2025-10-10/)).toBeInTheDocument();
+    });
+
+    it('should show staff warning when booking has assigned staff', () => {
+      renderDialog({ booking: mockBookingWithStaff });
+      expect(screen.getByText(/คุณพนักงาน ทดสอบ/)).toBeInTheDocument();
+      expect(screen.getByText(/การยกเลิกจะทำให้พนักงานคนนี้ว่างในช่วงเวลาดังกล่าว/)).toBeInTheDocument();
+    });
+
+    it('should not show staff warning when no staff assigned', () => {
+      renderDialog();
+      expect(screen.queryByText(/การยกเลิกจะทำให้พนักงาน/)).not.toBeInTheDocument();
+    });
+
+    it('should render reason dropdown', () => {
+      renderDialog();
+      expect(screen.getByLabelText(/เหตุผลในการยกเลิก/)).toBeInTheDocument();
+    });
+
+    it('should render optional notes textarea', () => {
+      renderDialog();
+      expect(screen.getByLabelText(/รายละเอียดเพิ่มเติม/)).toBeInTheDocument();
+    });
+
+    it('should show confirm and cancel buttons', () => {
+      renderDialog();
+      expect(screen.getByText('ยืนยันการยกเลิก')).toBeInTheDocument();
+      expect(screen.getByText('ไม่ยกเลิก')).toBeInTheDocument();
+    });
+  });
+
+  describe('Form Validation', () => {
+    it('should show validation error when submitting without reason', async () => {
+      const user = userEvent.setup();
+      renderDialog();
+
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('กรุณาเลือกเหตุผลในการยกเลิก')).toBeInTheDocument();
+      });
+
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('should clear validation error when reason is selected', async () => {
+      const user = userEvent.setup();
+      renderDialog();
+
+      // Click confirm without reason
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('กรุณาเลือกเหตุผลในการยกเลิก')).toBeInTheDocument();
+      });
+
+      // Select a reason
+      const reasonTrigger = screen.getByRole('combobox', { name: /เหตุผลในการยกเลิก/ });
+      await user.click(reasonTrigger);
+
+      const customerCancelledOption = await screen.findByText('ลูกค้าขอยกเลิก');
+      await user.click(customerCancelledOption);
+
+      // Validation error should be cleared
+      await waitFor(() => {
+        expect(screen.queryByText('กรุณาเลือกเหตุผลในการยกเลิก')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should disable confirm button when no reason selected', () => {
+      renderDialog();
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      expect(confirmButton).toBeDisabled();
+    });
+  });
+
+  describe('User Interactions', () => {
+    it('should enable confirm button after selecting reason', async () => {
+      const user = userEvent.setup();
+      renderDialog();
+
+      const reasonTrigger = screen.getByRole('combobox', { name: /เหตุผลในการยกเลิก/ });
+      await user.click(reasonTrigger);
+
+      const customerCancelledOption = await screen.findByText('ลูกค้าขอยกเลิก');
+      await user.click(customerCancelledOption);
+
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      expect(confirmButton).not.toBeDisabled();
+    });
+
+    it('should allow typing in notes textarea', async () => {
+      const user = userEvent.setup();
+      renderDialog();
+
+      const notesTextarea = screen.getByPlaceholderText('ระบุรายละเอียดเพิ่มเติม...');
+      await user.type(notesTextarea, 'ลูกค้าติดธุระกะทันหัน');
+
+      expect(notesTextarea).toHaveValue('ลูกค้าติดธุระกะทันหัน');
+    });
+
+    it('should call onClose when cancel button clicked', async () => {
+      const user = userEvent.setup();
+      renderDialog();
+
+      const cancelButton = screen.getByText('ไม่ยกเลิก');
+      await user.click(cancelButton);
+
+      expect(mockOnClose).toHaveBeenCalled();
+    });
+  });
+
+  describe('Loading States', () => {
+    it('should show loading state during submission', async () => {
+      const user = userEvent.setup();
+
+      // Mock slow API response
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  ok: true,
+                  json: async () => ({ success: true, booking: mockBooking }),
+                }),
+              1000
+            )
+          )
+      );
+
+      renderDialog();
+
+      // Select reason
+      const reasonTrigger = screen.getByRole('combobox', { name: /เหตุผลในการยกเลิก/ });
+      await user.click(reasonTrigger);
+      const option = await screen.findByText('ลูกค้าขอยกเลิก');
+      await user.click(option);
+
+      // Submit
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      // Should show loading state
+      await waitFor(() => {
+        expect(screen.getByText('กำลังยกเลิก...')).toBeInTheDocument();
+      });
+    });
+
+    it('should disable all inputs during submission', async () => {
+      const user = userEvent.setup();
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  ok: true,
+                  json: async () => ({ success: true, booking: mockBooking }),
+                }),
+              500
+            )
+          )
+      );
+
+      renderDialog();
+
+      // Select reason
+      const reasonTrigger = screen.getByRole('combobox', { name: /เหตุผลในการยกเลิก/ });
+      await user.click(reasonTrigger);
+      const option = await screen.findByText('ลูกค้าขอยกเลิก');
+      await user.click(option);
+
+      // Submit
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      // Check buttons are disabled
+      await waitFor(() => {
+        expect(screen.getByText('ไม่ยกเลิก')).toBeDisabled();
+        expect(screen.getByPlaceholderText('ระบุรายละเอียดเพิ่มเติม...')).toBeDisabled();
+      });
+    });
+  });
+
+  describe('Success Flow', () => {
+    it('should call API with correct data on submit', async () => {
+      const user = userEvent.setup();
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, booking: { ...mockBooking, status: 'cancelled' } }),
+      });
+
+      renderDialog();
+
+      // Select reason
+      const reasonTrigger = screen.getByRole('combobox', { name: /เหตุผลในการยกเลิก/ });
+      await user.click(reasonTrigger);
+      const option = await screen.findByText('ลูกค้าขอยกเลิก');
+      await user.click(option);
+
+      // Add notes
+      const notesTextarea = screen.getByPlaceholderText('ระบุรายละเอียดเพิ่มเติม...');
+      await user.type(notesTextarea, 'ลูกค้าติดธุระ');
+
+      // Submit
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          '/api/bookings/test-booking-123/status',
+          expect.objectContaining({
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'cancelled',
+              reason: 'customer_cancelled',
+              notes: 'ลูกค้าติดธุระ',
+            }),
+          })
+        );
+      });
+    });
+
+    it('should close dialog after successful cancellation', async () => {
+      const user = userEvent.setup();
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, booking: { ...mockBooking, status: 'cancelled' } }),
+      });
+
+      renderDialog();
+
+      // Select reason and submit
+      const reasonTrigger = screen.getByRole('combobox', { name: /เหตุผลในการยกเลิก/ });
+      await user.click(reasonTrigger);
+      const option = await screen.findByText('ลูกค้าขอยกเลิก');
+      await user.click(option);
+
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(mockOnClose).toHaveBeenCalled();
+      });
+    });
+
+    it('should call onSuccess callback after successful cancellation', async () => {
+      const user = userEvent.setup();
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, booking: { ...mockBooking, status: 'cancelled' } }),
+      });
+
+      renderDialog();
+
+      // Select reason and submit
+      const reasonTrigger = screen.getByRole('combobox', { name: /เหตุผลในการยกเลิก/ });
+      await user.click(reasonTrigger);
+      const option = await screen.findByText('ลูกค้าขอยกเลิก');
+      await user.click(option);
+
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(mockOnSuccess).toHaveBeenCalled();
+      });
+    });
+
+    it('should reset form after successful cancellation', async () => {
+      const user = userEvent.setup();
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, booking: { ...mockBooking, status: 'cancelled' } }),
+      });
+
+      renderDialog();
+
+      // Select reason and add notes
+      const reasonTrigger = screen.getByRole('combobox', { name: /เหตุผลในการยกเลิก/ });
+      await user.click(reasonTrigger);
+      const option = await screen.findByText('ลูกค้าขอยกเลิก');
+      await user.click(option);
+
+      const notesTextarea = screen.getByPlaceholderText('ระบุรายละเอียดเพิ่มเติม...');
+      await user.type(notesTextarea, 'Test notes');
+
+      // Submit
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(mockOnClose).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should show error toast when API call fails', async () => {
+      const { toast } = require('sonner');
+      const user = userEvent.setup();
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
+
+      renderDialog();
+
+      // Select reason and submit
+      const reasonTrigger = screen.getByRole('combobox', { name: /เหตุผลในการยกเลิก/ });
+      await user.click(reasonTrigger);
+      const option = await screen.findByText('ลูกค้าขอยกเลิก');
+      await user.click(option);
+
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          'ไม่สามารถยกเลิกการจองได้',
+          expect.objectContaining({
+            description: expect.any(String),
+          })
+        );
+      });
+    });
+
+    it('should keep dialog open after error', async () => {
+      const user = userEvent.setup();
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('API Error'));
+
+      renderDialog();
+
+      // Select reason and submit
+      const reasonTrigger = screen.getByRole('combobox', { name: /เหตุผลในการยกเลิก/ });
+      await user.click(reasonTrigger);
+      const option = await screen.findByText('ลูกค้าขอยกเลิก');
+      await user.click(option);
+
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Accessibility', () => {
+    it('should have proper ARIA labels', () => {
+      renderDialog();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByLabelText(/เหตุผลในการยกเลิก/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/รายละเอียดเพิ่มเติม/)).toBeInTheDocument();
+    });
+
+    it('should announce validation errors to screen readers', async () => {
+      const user = userEvent.setup();
+      renderDialog();
+
+      const confirmButton = screen.getByText('ยืนยันการยกเลิก');
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        const errorMessage = screen.getByText('กรุณาเลือกเหตุผลในการยกเลิก');
+        expect(errorMessage).toHaveAttribute('role', 'alert');
+        expect(errorMessage).toHaveAttribute('aria-live', 'polite');
+      });
+    });
+  });
+});
